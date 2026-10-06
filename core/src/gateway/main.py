@@ -2,12 +2,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 import gateway.models
 from gateway.db import engine
-from gateway.routers import chat, health
+from gateway.routers import admin, chat, health
 
 
 @asynccontextmanager
@@ -22,8 +23,15 @@ async def lifespan(app: FastAPI):
 api = APIRouter(prefix="/v1")
 api.include_router(health.router)
 api.include_router(chat.router)
+api.include_router(admin.router)
 
 app = FastAPI(title="Mwanga Gateway", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["GET", "POST", "PUT"],
+    allow_headers=["Content-Type", "X-API-Key"],
+)
 app.include_router(api)
 
 
