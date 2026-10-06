@@ -1,14 +1,14 @@
 services:
   # 0. Edge Reverse Proxy & TLS Termination
   caddy:
-    image: caddy:alpine
+    build: ./caddy
     container_name: mwanga_caddy
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
@@ -20,9 +20,13 @@ services:
     image: redis:alpine
     container_name: mwanga_redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
-    ports:
-      - "6379:6379"
+    env_file: ./env/redis.env
+    command: >
+      sh -c 'redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass "$$REDIS_PASSWORD"'
     volumes:
       - redis_data:/data
 

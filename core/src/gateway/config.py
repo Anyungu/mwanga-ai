@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+    redis_url: str = ""
 
     @field_validator("database_url")
     @classmethod

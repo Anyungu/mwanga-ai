@@ -2,6 +2,18 @@
 localhost {
     # Route backend API & MCP endpoints directly to FastAPI
     handle /api/* {
+        rate_limit {
+            zone origin {
+                key    {http.request.header.Origin}
+                events 600
+                window 1m
+            }
+            zone ip {
+                key    {remote_host}
+                events 60
+                window 1m
+            }
+        }
         uri strip_prefix /api
         reverse_proxy core:8000
     }
