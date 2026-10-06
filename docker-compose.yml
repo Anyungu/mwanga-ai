@@ -30,10 +30,7 @@ services:
   db:
     image: pgvector/pgvector:0.8.0-pg18-alpine
     container_name: irc_vector_db
-    environment:
-      POSTGRES_DB: ai_gateway
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: secretpassword
+    env_file: ./env/db.env
     ports:
       - "5432:5432"
     volumes:
@@ -52,11 +49,7 @@ services:
   core:
     build: ./core
     container_name: irc_ai_gateway
-    environment:
-      DATABASE_URL: postgresql://admin:secretpassword@db:5432/ai_gateway
-      OLLAMA_BASE_URL: http://ollama:11434
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    env_file: ./env/core.env
     ports:
       - "8000:8000"
     depends_on:
@@ -69,8 +62,7 @@ services:
     container_name: irc_admin_ui
     ports:
       - "3000:3000"
-    environment:
-      VITE_GATEWAY_URL: http://localhost:8000
+    env_file: ./env/admin-ui.env
     depends_on:
       - core
 
