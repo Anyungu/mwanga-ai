@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import select
 
 from gateway.db import session_factory
+from gateway.key_cache import invalidate_api_key_cache
 from gateway.models import APIKey, Role
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -97,4 +98,5 @@ async def revoke_key(key_id: int) -> KeyRecord:
         session.add(row)
         await session.commit()
         await session.refresh(row)
+    await invalidate_api_key_cache(row.key_hash)
     return to_record(row)

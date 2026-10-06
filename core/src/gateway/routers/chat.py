@@ -7,6 +7,7 @@ from gateway.db import session_factory
 from gateway.dependencies import verify_api_key
 from gateway.llm.router import generate
 from gateway.models import APIKey, UsageLog
+from gateway.rate_limit import enforce_rpm
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ async def chat(
     body: ChatRequest,
     api_key: APIKey = Depends(verify_api_key),
 ) -> ChatResponse:
+    await enforce_rpm(api_key)
     result = await generate(body.message)
     try:
         async with session_factory() as session:
