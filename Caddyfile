@@ -3,16 +3,16 @@ localhost {
     # Route backend API & MCP endpoints directly to FastAPI
     handle /api/* {
         uri strip_prefix /api
-        reverse_proxy gateway:8000
+        reverse_proxy core:8000
     }
 
     # Route OpenAPI / Swagger docs
     handle /docs* {
-        reverse_proxy gateway:8000
+        reverse_proxy core:8000
     }
 
     handle /openapi.json {
-        reverse_proxy gateway:8000
+        reverse_proxy core:8000
     }
 
     # Route everything else to TanStack Start Admin UI
