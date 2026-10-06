@@ -59,6 +59,7 @@ services:
     depends_on:
       - db
       - ollama
+      - redis
 
   # 4. TanStack Start Admin UI
   admin-ui:

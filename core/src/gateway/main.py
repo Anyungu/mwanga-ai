@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 import gateway.models
 from gateway.db import engine
+from gateway.redis_client import close_redis, ping_redis
 from gateway.routers import admin, chat, health
 
 
@@ -16,7 +17,9 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(gateway.models.SQLModel.metadata.create_all)
+    await ping_redis()
     yield
+    await close_redis()
     await engine.dispose()
 
 
