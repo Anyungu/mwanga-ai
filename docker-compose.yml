@@ -1,0 +1,100 @@
+services:
+  # 0. Edge Reverse Proxy & TLS Termination
+  caddy:
+    image: caddy:alpine
+    container_name: mwanga_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - gateway
+      - admin-ui
+
+  # 0.1. High-Performance In-Memory Cache & Rate Limiter
+  redis:
+    image: redis:alpine
+    container_name: mwanga_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # 1. PostgreSQL 18 with pgvector extension (lightweight alpine build)
+  db:
+    image: pgvector/pgvector:0.8.0-pg18-alpine
+    container_name: irc_vector_db
+    environment:
+      POSTGRES_DB: ai_gateway
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secretpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # 2. Local Open-Weight Model Runner
+  ollama:
+    image: ollama/ollama:latest
+    container_name: irc_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  # 3. FastAPI AI Gateway & MCP Server
+  gateway:
+    build: ./gateway
+    container_name: irc_ai_gateway
+    environment:
+      DATABASE_URL: postgresql://admin:secretpassword@db:5432/ai_gateway
+      OLLAMA_BASE_URL: http://ollama:11434
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - ollama
+
+  # 4. TanStack Start Admin UI
+  admin-ui:
+    build: ./admin-ui
+    container_name: irc_admin_ui
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_GATEWAY_URL: http://localhost:8000
+    depends_on:
+      - gateway
+
+  # 5. Prometheus Metrics (Lightweight Alpine)
+  prometheus:
+    image: prom/prometheus:alpine
+    container_name: irc_prometheus
+    volumes:
+      - ./telemetry/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  # 6. Grafana Visual Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: irc_grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:
+  redis_data:
+  ollama_data:
+  caddy_data:
+  caddy_config:
