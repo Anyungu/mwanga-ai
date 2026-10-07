@@ -1,15 +1,15 @@
 import hashlib
 import secrets
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlmodel import select
+from sqlmodel import col, func, select
 
 from gateway.db import session_factory
 from gateway.key_cache import invalidate_api_key_cache
-from gateway.models import APIKey, Role
+from gateway.models import APIKey, Role, UsageLog
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -42,6 +42,14 @@ class KeyRecord(BaseModel):
     daily_cost_limit_usd: float
     is_active: bool
     created_at: datetime
+
+
+class KeyUsage(BaseModel):
+    api_key_id: int
+    request_count: int
+    tokens_input: int
+    tokens_output: int
+    cost_usd: float
 
 
 def to_record(row: APIKey) -> KeyRecord:
@@ -85,6 +93,38 @@ async def list_keys() -> list[KeyRecord]:
         result = await session.exec(select(APIKey).order_by(APIKey.created_at.desc()))
         rows = result.all()
     return [to_record(row) for row in rows]
+
+
+@router.get("/keys/usage")
+async def list_key_usage() -> list[KeyUsage]:
+    start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    async with session_factory() as session:
+        result = await session.exec(
+            select(
+                UsageLog.api_key_id,
+                func.count().label("request_count"),
+                func.coalesce(func.sum(col(UsageLog.tokens_input)), 0).label("tokens_input"),
+                func.coalesce(func.sum(col(UsageLog.tokens_output)), 0).label("tokens_output"),
+                func.coalesce(func.sum(col(UsageLog.cost_usd)), 0.0).label("cost_usd"),
+            )
+            .where(
+                UsageLog.timestamp >= start,
+                col(UsageLog.api_key_id).is_not(None),
+            )
+            .group_by(UsageLog.api_key_id)
+        )
+        rows = result.all()
+    return [
+        KeyUsage(
+            api_key_id=api_key_id,
+            request_count=int(request_count),
+            tokens_input=int(tokens_input),
+            tokens_output=int(tokens_output),
+            cost_usd=float(cost_usd),
+        )
+        for api_key_id, request_count, tokens_input, tokens_output, cost_usd in rows
+        if api_key_id is not None
+    ]
 
 
 @router.put("/keys/{key_id}/revoke")

@@ -2,11 +2,12 @@ import { ChatTry } from '#/components/keys/chat-try'
 import { KeyForm } from '#/components/keys/key-form'
 import { KeyTable } from '#/components/keys/key-table'
 import { useCreateKey, useRevokeKey } from '#/hooks/mutations/keys'
-import { useKeysQuery } from '#/hooks/queries/keys'
+import { useKeyUsageQuery, useKeysQuery } from '#/hooks/queries/keys'
 import type { KeyCreate } from '#/lib/schemas/keys'
 
 export function KeysPage() {
   const keys = useKeysQuery()
+  const usage = useKeyUsageQuery()
   const create = useCreateKey()
   const revoke = useRevokeKey()
 
@@ -16,7 +17,7 @@ export function KeysPage() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto flex max-w-3xl flex-col gap-8 px-6 py-10">
+      <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10">
         <header>
           <h1 className="text-2xl font-medium">API keys</h1>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -26,6 +27,7 @@ export function KeysPage() {
         <KeyForm onSubmit={createKey} />
         <KeyTable
           keys={keys.data ?? []}
+          usage={usage.data ?? []}
           pending={keys.isPending}
           error={keys.isError ? keys.error.message : null}
           revokingId={revoke.isPending ? revoke.variables : null}

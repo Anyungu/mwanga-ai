@@ -1,10 +1,14 @@
 import { createServerFn } from '@tanstack/react-start'
 
 import { gateway } from '#/lib/api'
-import { type KeyRecord, keyCreateSchema, revokeKeySchema } from '#/lib/schemas/keys'
+import { type KeyRecord, type KeyUsage, keyCreateSchema, revokeKeySchema } from '#/lib/schemas/keys'
 
 export const listKeys = createServerFn({ method: 'GET' }).handler(() =>
   gateway<KeyRecord[]>('/v1/admin/keys'),
+)
+
+export const listKeyUsage = createServerFn({ method: 'GET' }).handler(() =>
+  gateway<KeyUsage[]>('/v1/admin/keys/usage'),
 )
 
 export const createKey = createServerFn({ method: 'POST' })

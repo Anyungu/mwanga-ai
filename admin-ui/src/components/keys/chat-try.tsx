@@ -1,48 +1,33 @@
-import { type FormEvent, useState } from 'react'
+import { valibotResolver } from '@hookform/resolvers/valibot'
+import { Controller, useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 
 import { Button } from '#/components/ui/button'
 import { TextInput } from '#/components/ui/text-input'
-import { apiClient } from '#/lib/api'
-import { chatUrl } from '#/lib/keys'
-import type { KeyRecord } from '#/lib/schemas/keys'
+import { useChat } from '#/hooks/mutations/chat'
+import { type ChatMessage, type KeyRecord, chatMessageSchema } from '#/lib/schemas/keys'
 
 interface ChatTryProps {
   issued?: KeyRecord & { key: string }
 }
 
 export function ChatTry({ issued }: ChatTryProps) {
-  const [message, setMessage] = useState('')
-  const [reply, setReply] = useState('')
-  const [pending, setPending] = useState(false)
+  const chat = useChat()
+  const form = useForm<ChatMessage>({
+    resolver: valibotResolver(chatMessageSchema),
+    defaultValues: { message: '' },
+  })
 
-  async function submit(event: FormEvent) {
-    event.preventDefault()
+  async function submit(values: ChatMessage) {
     if (!issued) {
       toast.error('Create a key first', { id: 'Create a key first' })
       return
     }
-    setReply('')
-    setPending(true)
-    const [error, body] = await apiClient<{ reply: string }>(chatUrl(), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': issued.key,
-      },
-      body: JSON.stringify({ message }),
-    })
-    setPending(false)
-    if (error || !body) {
-      const detail = error?.message ?? 'Request failed'
-      toast.error(detail, { id: detail })
-      return
-    }
-    setReply(body.reply)
+    await chat.mutateAsync({ message: values.message, key: issued.key })
   }
 
   return (
-    <form onSubmit={submit} className="rounded-lg border bg-card p-4">
+    <form onSubmit={form.handleSubmit(submit)} className="rounded-lg border bg-card p-4">
       <h2 className="text-sm font-medium">Try chat</h2>
       {issued ? (
         <p className="mt-3 rounded-md bg-muted px-3 py-2 font-mono text-sm break-all">
@@ -52,14 +37,25 @@ export function ChatTry({ issued }: ChatTryProps) {
         <p className="mt-3 text-sm text-muted-foreground">Create a key first. It is shown once.</p>
       )}
       <div className="mt-4">
-        <TextInput label="Message" value={message} required onChange={setMessage} />
+        <Controller
+          name="message"
+          control={form.control}
+          render={({ field, fieldState }) => (
+            <TextInput
+              label="Message"
+              value={field.value}
+              error={fieldState.error?.message}
+              onChange={field.onChange}
+            />
+          )}
+        />
       </div>
       <div className="mt-4">
-        <Button type="submit" disabled={pending || !issued}>
+        <Button type="submit" disabled={form.formState.isSubmitting || !issued}>
           Send
         </Button>
       </div>
-      {reply && <p className="mt-4 text-sm">{reply}</p>}
+      {chat.data?.reply && <p className="mt-4 text-sm">{chat.data.reply}</p>}
     </form>
   )
 }
