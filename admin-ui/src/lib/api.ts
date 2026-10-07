@@ -25,3 +25,7 @@ export async function gateway<T>(path: string, init?: RequestInit): Promise<T> {
   if (error) throw error
   return data as T
 }
+
+export async function gatewayForm<T>(path: string, formData: FormData): Promise<T> {
+  return gateway<T>(path, { method: 'POST', body: formData })
+}

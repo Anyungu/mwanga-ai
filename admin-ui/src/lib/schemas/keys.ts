@@ -37,6 +37,11 @@ export const chatMessageSchema = v.object({
   message: v.pipe(v.string(), v.minLength(1)),
 })
 
+export interface DocumentIngested {
+  source: string
+  chunks: number
+}
+
 export type KeyCreate = v.InferOutput<typeof keyCreateSchema>
 export type RevokeKey = v.InferOutput<typeof revokeKeySchema>
 export type ChatMessage = v.InferOutput<typeof chatMessageSchema>

@@ -1,10 +1,12 @@
 import hashlib
 import secrets
 from datetime import datetime, timezone
+from io import BytesIO
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
+from pypdf import PdfReader
 from sqlmodel import col, delete, func, select
 
 from gateway.db import session_factory
@@ -17,6 +19,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 DemoRole = Literal["service_account", "viewer"]
 _MAX_CHUNKS = 200
+_MAX_CONTENT = 100_000
 
 
 class KeyCreate(BaseModel):
@@ -57,7 +60,7 @@ class KeyUsage(BaseModel):
 
 class DocumentIngest(BaseModel):
     source: str = Field(min_length=1)
-    content: str = Field(min_length=1, max_length=100_000)
+    content: str = Field(min_length=1, max_length=_MAX_CONTENT)
 
 
 class DocumentIngested(BaseModel):
@@ -80,6 +83,41 @@ def to_record(row: APIKey) -> KeyRecord:
         is_active=row.is_active,
         created_at=row.created_at,
     )
+
+
+async def _ingest_text(source: str, content: str) -> DocumentIngested:
+    text = content.strip()
+    if not text:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty content")
+    if len(text) > _MAX_CONTENT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document text exceeds limit",
+        )
+    pieces = chunk_text(text)
+    if not pieces:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty content")
+    if len(pieces) > _MAX_CHUNKS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Document exceeds {_MAX_CHUNKS} chunks",
+        )
+    rows: list[DocumentChunk] = []
+    for piece in pieces:
+        rows.append(
+            DocumentChunk(
+                source_document=source,
+                content=piece,
+                embedding=await embed(piece),
+            )
+        )
+    async with session_factory() as session:
+        await session.exec(
+            delete(DocumentChunk).where(col(DocumentChunk.source_document) == source)
+        )
+        session.add_all(rows)
+        await session.commit()
+    return DocumentIngested(source=source, chunks=len(rows))
 
 
 @router.post("/keys", status_code=status.HTTP_201_CREATED)
@@ -142,30 +180,24 @@ async def list_key_usage() -> list[KeyUsage]:
 
 @router.post("/documents", status_code=status.HTTP_201_CREATED)
 async def ingest_document(body: DocumentIngest) -> DocumentIngested:
-    pieces = chunk_text(body.content)
-    if not pieces:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty content")
-    if len(pieces) > _MAX_CHUNKS:
+    return await _ingest_text(body.source, body.content)
+
+
+@router.post("/documents/upload", status_code=status.HTTP_201_CREATED)
+async def upload_document(file: UploadFile = File(...)) -> DocumentIngested:
+    filename = file.filename or "upload"
+    data = await file.read()
+    lower = filename.lower()
+    if lower.endswith(".pdf"):
+        text = "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(data)).pages)
+    elif lower.endswith(".txt") or lower.endswith(".md"):
+        text = data.decode("utf-8")
+    else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Document exceeds {_MAX_CHUNKS} chunks",
+            detail="Only TXT, MD, or PDF files are allowed",
         )
-    rows: list[DocumentChunk] = []
-    for piece in pieces:
-        rows.append(
-            DocumentChunk(
-                source_document=body.source,
-                content=piece,
-                embedding=await embed(piece),
-            )
-        )
-    async with session_factory() as session:
-        await session.exec(
-            delete(DocumentChunk).where(col(DocumentChunk.source_document) == body.source)
-        )
-        session.add_all(rows)
-        await session.commit()
-    return DocumentIngested(source=body.source, chunks=len(rows))
+    return await _ingest_text(filename, text)
 
 
 @router.put("/keys/{key_id}/revoke")

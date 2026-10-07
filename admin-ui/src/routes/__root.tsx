@@ -1,5 +1,5 @@
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
+import { HeadContent, Outlet, Scripts, createRootRoute } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import { CircleAlert } from 'lucide-react'
@@ -30,7 +30,18 @@ export const Route = createRootRoute({
     ],
   }),
   shellComponent: RootDocument,
+  component: AppLayout,
 })
+
+function AppLayout() {
+  return (
+    <main className="min-h-screen bg-background text-foreground">
+      <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10">
+        <Outlet />
+      </div>
+    </main>
+  )
+}
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
