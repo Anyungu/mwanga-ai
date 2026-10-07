@@ -3,11 +3,13 @@ import logging
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from gateway.costing import estimate_cost_usd
 from gateway.db import session_factory
 from gateway.dependencies import verify_api_key
 from gateway.llm.router import generate
 from gateway.models import APIKey, UsageLog
 from gateway.rate_limit import enforce_rpm
+from gateway.spend import add_daily_spend, enforce_daily_spend
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +30,11 @@ async def chat(
     api_key: APIKey = Depends(verify_api_key),
 ) -> ChatResponse:
     await enforce_rpm(api_key)
+    await enforce_daily_spend(api_key)
     result = await generate(body.message)
+    cost_usd = estimate_cost_usd(result.model, result.tokens_input, result.tokens_output)
+    if api_key.id is not None:
+        await add_daily_spend(api_key.id, cost_usd)
     try:
         async with session_factory() as session:
             session.add(
@@ -37,6 +43,7 @@ async def chat(
                     model_used=result.model,
                     tokens_input=result.tokens_input,
                     tokens_output=result.tokens_output,
+                    cost_usd=cost_usd,
                 )
             )
             await session.commit()
