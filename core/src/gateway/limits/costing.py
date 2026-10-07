@@ -1,6 +1,3 @@
-"""Simple USD estimates for usage accounting (not billing-grade)."""
-
-# Approximate public list rates per 1M tokens.
 _RATES_PER_MILLION: dict[str, tuple[float, float]] = {
     "gemini-3.8-flash": (0.075, 0.30),
 }

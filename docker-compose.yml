@@ -49,6 +49,21 @@ services:
     volumes:
       - ollama_data:/root/.ollama
 
+  # 2.1. Pull embedding model once Ollama is ready
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: irc_ollama_init
+    env_file: ./env/ollama-init.env
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until ollama list >/dev/null 2>&1; do sleep 1; done
+        ollama pull nomic-embed-text
+    depends_on:
+      - ollama
+    restart: "no"
+
   # 3. FastAPI AI Gateway & MCP Server
   core:
     build: ./core
@@ -57,9 +72,14 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - db
-      - ollama
-      - redis
+      db:
+        condition: service_started
+      ollama:
+        condition: service_started
+      redis:
+        condition: service_started
+      ollama-init:
+        condition: service_completed_successfully
 
   # 4. TanStack Start Admin UI
   admin-ui:

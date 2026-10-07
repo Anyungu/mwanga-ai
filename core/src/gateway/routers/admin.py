@@ -5,15 +5,18 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlmodel import col, func, select
+from sqlmodel import col, delete, func, select
 
 from gateway.db import session_factory
-from gateway.key_cache import invalidate_api_key_cache
-from gateway.models import APIKey, Role, UsageLog
+from gateway.limits.key_cache import invalidate_api_key_cache
+from gateway.llm.embed import embed
+from gateway.models import APIKey, DocumentChunk, Role, UsageLog
+from gateway.rag.retrieve import chunk_text
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 DemoRole = Literal["service_account", "viewer"]
+_MAX_CHUNKS = 200
 
 
 class KeyCreate(BaseModel):
@@ -50,6 +53,16 @@ class KeyUsage(BaseModel):
     tokens_input: int
     tokens_output: int
     cost_usd: float
+
+
+class DocumentIngest(BaseModel):
+    source: str = Field(min_length=1)
+    content: str = Field(min_length=1, max_length=100_000)
+
+
+class DocumentIngested(BaseModel):
+    source: str
+    chunks: int
 
 
 def to_record(row: APIKey) -> KeyRecord:
@@ -125,6 +138,34 @@ async def list_key_usage() -> list[KeyUsage]:
         for api_key_id, request_count, tokens_input, tokens_output, cost_usd in rows
         if api_key_id is not None
     ]
+
+
+@router.post("/documents", status_code=status.HTTP_201_CREATED)
+async def ingest_document(body: DocumentIngest) -> DocumentIngested:
+    pieces = chunk_text(body.content)
+    if not pieces:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty content")
+    if len(pieces) > _MAX_CHUNKS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Document exceeds {_MAX_CHUNKS} chunks",
+        )
+    rows: list[DocumentChunk] = []
+    for piece in pieces:
+        rows.append(
+            DocumentChunk(
+                source_document=body.source,
+                content=piece,
+                embedding=await embed(piece),
+            )
+        )
+    async with session_factory() as session:
+        await session.exec(
+            delete(DocumentChunk).where(col(DocumentChunk.source_document) == body.source)
+        )
+        session.add_all(rows)
+        await session.commit()
+    return DocumentIngested(source=body.source, chunks=len(rows))
 
 
 @router.put("/keys/{key_id}/revoke")

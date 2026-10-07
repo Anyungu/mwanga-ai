@@ -5,7 +5,7 @@ from fastapi.security import APIKeyHeader
 from sqlmodel import select
 
 from gateway.db import session_factory
-from gateway.key_cache import get_cached_api_key, set_cached_api_key
+from gateway.limits.key_cache import get_cached_api_key, set_cached_api_key
 from gateway.models import APIKey
 
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
